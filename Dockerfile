@@ -4,13 +4,12 @@ FROM python:3.12-alpine3.17
 COPY src/* /
 
 RUN apk add --no-cache git bash curl jq && \
-    wget -O gh.tar.gz https://github.com/cli/cli/releases/download/v2.82.1/gh_2.82.1_linux_amd64.tar.gz && \
+    curl -L -o gh.tar.gz https://github.com/cli/cli/releases/download/v2.82.1/gh_2.82.1_linux_amd64.tar.gz && \
     tar -xzf gh.tar.gz && \
     mv gh_*/bin/gh /usr/local/bin/gh && \
     rm -rf gh_* gh.tar.gz
 
 RUN pip install --no-cache-dir -r /requirements.txt && \
-    pip install --upgrade packaging setuptools wheel && \
     poetry config virtualenvs.create false --local && \
     poetry install --no-root && \
     pip install --upgrade "packaging>=24.0"
