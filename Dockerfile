@@ -6,6 +6,7 @@ COPY src/* /
 RUN apk add --no-cache git bash curl jq github-cli
 
 RUN pip install --no-cache-dir -r /requirements.txt && \
+    pip install --upgrade packaging setuptools wheel && \
     poetry config virtualenvs.create false --local && \
     poetry install --no-root
 
