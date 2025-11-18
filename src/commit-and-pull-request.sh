@@ -113,22 +113,27 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
 
   git push origin "${BRANCH}" -f
   set +e
-  PR="$(gh pr view 2>&1)"
+  # Use explicit JSON fields to avoid querying deprecated projectCards
+  # Check if PR exists by attempting to view it
+  PR_OUTPUT="$(gh pr view --json number,title,state,url 2>&1)"
+  PR_EXIT_CODE=$?
   set -e
+  # If command failed or output contains error message, PR doesn't exist
   # We're just looking for the sub-string here, not a regex
   # shellcheck disable=SC2076
-  if [[ "${PR}" =~ "no pull requests found" ]]; then
+  if [[ ${PR_EXIT_CODE} -ne 0 ]] || [[ "${PR_OUTPUT}" =~ "no pull requests found" ]]; then
     gh pr create --fill
   else
     echo "PR Already exists:"
-    gh pr view
+    # Use explicit JSON fields to avoid querying deprecated projectCards
+    gh pr view --json number,title,state,url,headRefName,baseRefName
   fi
 
   if [[ -n "${LABELS}" ]]; then
     echo "Adding labels to PR: ${LABELS}"
     gh pr edit --add-label "${LABELS}"
   fi  
-
+  
   if [[ -n "${PR_REVIEWER}" ]]; then
     echo "Adding reviewer to PR: ${PR_REVIEWER}"
     gh pr edit --add-reviewer "${PR_REVIEWER}"
@@ -170,7 +175,8 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
     echo "Promotion PR has been created and has passed checks. Details below."
   fi
   
-  gh pr view
+  # Use explicit JSON fields to avoid querying deprecated projectCards
+  gh pr view --json number,title,state,url,headRefName,baseRefName
   PULL_REQUEST_URL="$(gh pr view --json url -q '.url')"
   
 elif [[ "${PROMOTION_METHOD}" == "push" ]]; then

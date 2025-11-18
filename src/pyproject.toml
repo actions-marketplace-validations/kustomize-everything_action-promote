@@ -9,6 +9,7 @@ python = "^3.9.0"
 PyYAML = "^6.0"
 loguru = "^0.7.0"
 types-pyyaml = "^6.0.12.12"
+packaging = ">=24.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
