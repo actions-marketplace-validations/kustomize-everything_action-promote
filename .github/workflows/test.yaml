@@ -166,7 +166,7 @@ jobs:
         uses: ./
         with:
           target-repo: kustomize-everything/test-deploy
-          target-branch: ${{ env.BRANCH }}
+          target-branch: nbairwal-action-promote-patch-1
           working-directory: test-deploy
           images: ${{ env.PROMOTION }}
           github-token: ${{ secrets.PUSHER_ROBOT_GITHUB_TOKEN }}
