@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r /requirements.txt && \
     pip install --upgrade packaging setuptools wheel && \
     poetry config virtualenvs.create false --local && \
     poetry install --no-root
+    pip install --upgrade "packaging>=24.0"
 
 # Executes `entrypoint.sh` when the Docker container starts up
 ENTRYPOINT ["/entrypoint.sh"]
