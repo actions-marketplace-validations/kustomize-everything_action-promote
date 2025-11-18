@@ -86,9 +86,13 @@ fi
 if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
   if [[ "${AGGREGATE_PR_CHANGES}" == "true" ]]; then
     BRANCH_REGEX=$(echo "promotion/${GITHUB_REPOSITORY:?}/${TARGET_BRANCH:?}/${OVERLAY_NAMES_NO_SLASH:?}/${PR_UNIQUE_KEY:?}"|tr "/" "-")
-    HEAD_REF_NAME=$(gh pr list --json headRefName | jq -rc '.[].headRefName')
+    # Use explicit JSON fields to avoid querying deprecated projectCards
+    # Suppress stderr warnings about projectCards deprecation
+    HEAD_REF_NAME=$(gh pr list --json headRefName 2>/dev/null | jq -rc '.[].headRefName')
     if [[ "${HEAD_REF_NAME}" =~ .*${BRANCH_REGEX}.* ]]; then
-      BRANCH=$(gh pr list --json headRefName | jq -rc '.[].headRefName' | grep "${BRANCH_REGEX}")
+      # Use explicit JSON fields to avoid querying deprecated projectCards
+      # Suppress stderr warnings about projectCards deprecation
+      BRANCH=$(gh pr list --json headRefName 2>/dev/null | jq -rc '.[].headRefName' | grep "${BRANCH_REGEX}")
       git stash
       git checkout -B "${BRANCH}"
       git rebase "${TARGET_BRANCH}"
@@ -122,26 +126,31 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
   # We're just looking for the sub-string here, not a regex
   # shellcheck disable=SC2076
   if [[ ${PR_EXIT_CODE} -ne 0 ]] || [[ "${PR_OUTPUT}" =~ "no pull requests found" ]]; then
-    gh pr create --fill
+    # Suppress stderr warnings about projectCards deprecation
+    gh pr create --fill 2>/dev/null
   else
     echo "PR Already exists:"
     # Use explicit JSON fields to avoid querying deprecated projectCards
-    gh pr view --json number,title,state,url,headRefName,baseRefName
+    # Suppress stderr warnings about projectCards deprecation
+    gh pr view --json number,title,state,url,headRefName,baseRefName 2>/dev/null
   fi
 
   if [[ -n "${LABELS}" ]]; then
     echo "Adding labels to PR: ${LABELS}"
-    gh pr edit --add-label "${LABELS}"
+    # Suppress stderr warnings about projectCards deprecation
+    gh pr edit --add-label "${LABELS}" 2>/dev/null
   fi  
-
+  
   if [[ -n "${PR_REVIEWER}" ]]; then
     echo "Adding reviewer to PR: ${PR_REVIEWER}"
-    gh pr edit --add-reviewer "${PR_REVIEWER}"
+    # Suppress stderr warnings about projectCards deprecation
+    gh pr edit --add-reviewer "${PR_REVIEWER}" 2>/dev/null
   fi
 
   echo
   echo "Waiting for status checks to complete..."
-  wait_for_result_not_found "reported\|Waiting\|pending" "gh pr checks" "${STATUS_ATTEMPTS}" "${STATUS_INTERVAL}" "false"
+  # Suppress stderr warnings about projectCards deprecation in the wait function
+  wait_for_result_not_found "reported\|Waiting\|pending" "gh pr checks 2>/dev/null" "${STATUS_ATTEMPTS}" "${STATUS_INTERVAL}" "false"
 
   echo
   if [[ "${AUTO_MERGE}" == "true" ]]; then
@@ -149,9 +158,11 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
     # Ref: https://github.com/cli/cli/issues/8092
     for i in {1..3}; do
       echo "Checking if the PR is still open..."
-      if ! gh pr view --json state | jq -e '.state == "MERGED"' >/dev/null 2>&1; then
+      # Suppress stderr warnings about projectCards deprecation
+      if ! gh pr view --json state 2>/dev/null | jq -e '.state == "MERGED"' >/dev/null 2>&1; then
         echo "Status checks have all passed. Attempting to merge PR..."
-        if gh pr merge --squash --admin --delete-branch; then
+        # Suppress stderr warnings about projectCards deprecation
+        if gh pr merge --squash --admin --delete-branch 2>/dev/null; then
           break
         fi
       else
@@ -176,8 +187,9 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
   fi
   
   # Use explicit JSON fields to avoid querying deprecated projectCards
-  gh pr view --json number,title,state,url,headRefName,baseRefName
-  PULL_REQUEST_URL="$(gh pr view --json url -q '.url')"
+  # Suppress stderr warnings about projectCards deprecation
+  gh pr view --json number,title,state,url,headRefName,baseRefName 2>/dev/null
+  PULL_REQUEST_URL="$(gh pr view --json url -q '.url' 2>/dev/null)"
   
 elif [[ "${PROMOTION_METHOD}" == "push" ]]; then
   git add .
