@@ -17,6 +17,8 @@ if [[ "${DEBUG}" == "true" ]]; then
 
   env
 fi
+# Sets images-updated early so that it is always set, even if promote fails
+echo "images-updated=[]" >> "${GITHUB_OUTPUT}"
 
 GITHUB_REF_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_REF}"
 export GITHUB_REF_URL
@@ -82,6 +84,13 @@ jq -c -r '[.[] | .images | map(.name)] | unique | sort | flatten | join(", ")' <
 echo "images=$(cat images.txt)" >> "${GITHUB_OUTPUT}"
 IMAGES_NAMES="$(cat images.txt)"
 export IMAGES_NAMES
+
+# xargs ignores errors from jq, but also strips quotes. we handle errors differently for images-updated
+# since we need the file to be a proper json object
+jq -c -r '[.[] | .images | unique| .[] | "\(.newName):\(.newTag)"]' manifest.json  > images-updated.txt  2>/dev/null || echo "Error setting images-updated. Continuing"
+echo "images-updated=$(cat images-updated.txt)" >> "${GITHUB_OUTPUT}"
+IMAGES_UPDATED="$(cat images-updated.txt)"
+export IMAGES_UPDATED
 
 # shellcheck disable=SC2129
 jq -c -r '[.[] | .charts | map(.name)] | unique | sort | flatten | join(", ")' < manifest.json | xargs > charts.txt

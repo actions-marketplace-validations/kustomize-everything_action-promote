@@ -11,6 +11,7 @@ on:
 env:
   TEST_DEPLOY_SHA: main
   BRANCH: main
+  KUSTOMIZATION_FILE: test-deploy/env/dev/kustomization.yaml
 
 jobs:
   action-image-testing:
@@ -20,9 +21,10 @@ jobs:
       fail-fast: true
       matrix:
         promotion: [simple-promotion, complex-promotion, cross-overlay-promotion]
+        promotion-method: [push, pull_request]
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Read in examples to github output
         id: read-examples
@@ -31,12 +33,14 @@ jobs:
           # Generate unique EOF value to prevent injection attack
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
 
+          # Add action run number to the end of the newTag to ensure that
+          # the tag always changes.
           echo "PROMOTION<<$EOF" >> $GITHUB_ENV
-          cat example/${{ matrix.promotion }}.json >> $GITHUB_ENV
+          jq '.[0].newTag = "2.2.0-${{ github.run_number }}"' example/${{ matrix.promotion }}.json >> $GITHUB_ENV
           echo "$EOF" >> $GITHUB_ENV
 
       - name: Checkout Testing Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           repository: kustomize-everything/test-deploy
@@ -51,10 +55,34 @@ jobs:
           target-branch: ${{ env.BRANCH }}
           working-directory: test-deploy
           images: ${{ env.PROMOTION }}
+          promotion-method: ${{ matrix.promotion-method }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           dry-run: true
           # Useful for debugging the action
           # debug: true
+
+      - name: Verify that newTag was updated
+        run: |
+          # Fail if kustomization file doesn't exist
+          if [[ ! -f "${KUSTOMIZATION_FILE}" ]]; then
+            echo "kustomization file does not exist"
+            exit 1
+          fi
+
+          # If we're testing the cross-overlay promotion
+          if [[ "${{matrix.promotion}}" == "cross-overlay-promotion" ]]; then
+              echo "Cross-overlay TBD"
+          elif [[ "${{matrix.promotion}}" == "simple-promotion" || "${{matrix.promotion}}" == complex-promotion ]]; then
+            if ! grep -q "2.2.0-${{ github.run_number }}" "${KUSTOMIZATION_FILE}"; then
+              echo "newTag was not updated"
+              echo "Contents of ${KUSTOMIZATION_FILE}:"
+              cat "${KUSTOMIZATION_FILE}"
+              exit 1
+            fi
+          else
+            echo "Unknown promotion type. Did you forget to specify it?"
+            exit 1
+          fi
 
   action-helm-testing:
     name: Action Helm Testing
@@ -63,9 +91,10 @@ jobs:
       fail-fast: true
       matrix:
         promotion: [helm-promotion, helm-cross-overlay-promotion]
+        promotion-method: [push, pull_request]
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Read in examples to github output
         id: read-examples
@@ -79,7 +108,7 @@ jobs:
           echo "$EOF" >> $GITHUB_ENV
 
       - name: Checkout Testing Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           repository: kustomize-everything/test-deploy
@@ -94,6 +123,7 @@ jobs:
           target-branch: ${{ env.BRANCH }}
           working-directory: test-deploy
           charts: ${{ env.PROMOTION }}
+          promotion-method: ${{ matrix.promotion-method }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           dry-run: true
           # Useful for debugging the action
@@ -108,7 +138,7 @@ jobs:
         promotion: [simple-promotion, complex-promotion]
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Read in examples to github output
         id: read-examples
@@ -117,12 +147,14 @@ jobs:
           # Generate unique EOF value to prevent injection attack
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
 
+          # Add action run number to the end of the newTag to ensure that
+          # the tag always changes.
           echo "PROMOTION<<$EOF" >> $GITHUB_ENV
-          cat example/${{ matrix.promotion }}.json >> $GITHUB_ENV
+          jq '.[0].newTag = "2.2.0-${{ github.run_number }}"' example/${{ matrix.promotion }}.json >> $GITHUB_ENV
           echo "$EOF" >> $GITHUB_ENV
 
       - name: Checkout Testing Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           repository: kustomize-everything/test-deploy
@@ -141,8 +173,24 @@ jobs:
           promotion-method: pull_request
           dry-run: false
           auto-merge: false
+          labels: bug
           # Useful for debugging the action
           # debug: true
+
+      - name: Verify that newTag was updated
+        run: |
+          # Fail if kustomization file doesn't exist
+          if [[ ! -f "${KUSTOMIZATION_FILE}" ]]; then
+            echo "kustomization file does not exist"
+            exit 1
+          fi
+
+          if ! grep -q "2.2.0-${{ github.run_number }}" "${KUSTOMIZATION_FILE}"; then
+            echo "newTag was not updated"
+            echo "Contents of ${KUSTOMIZATION_FILE}:"
+            cat "${KUSTOMIZATION_FILE}"
+            exit 1
+          fi
 
   action-open-pr-reuse-testing:
     name: Action Open PR with Reuse Testing
@@ -153,7 +201,7 @@ jobs:
         promotion: [simple-promotion, complex-promotion]
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Read in examples to github output
         id: read-examples
@@ -163,17 +211,17 @@ jobs:
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
 
           echo "PROMOTION<<$EOF" >> $GITHUB_ENV
-          cat example/${{ matrix.promotion }}.json >> $GITHUB_ENV
+          jq '.[0].newTag = "2.2.0-${{github.run_number}}"' example/${{ matrix.promotion }}.json >> $GITHUB_ENV
           echo "$EOF" >> $GITHUB_ENV
 
           # This relies on the first promotion in the configuration for the matrix
           # being an image promotion.
           echo "PROMOTION_2<<$EOF" >> $GITHUB_ENV
-          jq '.[0].newTag = "2.2.2"' example/${{ matrix.promotion }}.json >> $GITHUB_ENV
+          jq '.[0].newTag = "2.3.0-${{github.run_number}}"' example/${{ matrix.promotion }}.json >> $GITHUB_ENV
           echo "$EOF" >> $GITHUB_ENV
 
       - name: Checkout Testing Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           repository: kustomize-everything/test-deploy
@@ -196,6 +244,20 @@ jobs:
           pr-unique-key: gha-testing-${{ env.BRANCH }}
           # Useful for debugging the action
           # debug: true
+      - name: Verify that newTag was updated
+        run: |
+          # Fail if kustomization file doesn't exist
+          if [[ ! -f "${KUSTOMIZATION_FILE}" ]]; then
+            echo "kustomization file does not exist"
+            exit 1
+          fi
+
+          if ! grep -q "2.2.0-${{ github.run_number }}" "${KUSTOMIZATION_FILE}"; then
+            echo "newTag was not updated"
+            echo "Contents of ${KUSTOMIZATION_FILE}:"
+            cat "${KUSTOMIZATION_FILE}"
+            exit 1
+          fi
 
       - name: Action Test with ${{ matrix.promotion }} (reuse previous PR)
         uses: ./
@@ -210,16 +272,30 @@ jobs:
           auto-merge: false
           aggregate-pr-changes: true
           pr-unique-key: gha-testing-${{ env.BRANCH }}
+      - name: Verify that newTag was updated
+        run: |
+          # Fail if kustomization file doesn't exist
+          if [[ ! -f "${KUSTOMIZATION_FILE}" ]]; then
+            echo "kustomization file does not exist"
+            exit 1
+          fi
+
+          if ! grep -q "2.3.0-${{ github.run_number }}" "${KUSTOMIZATION_FILE}"; then
+            echo "newTag was not updated"
+            echo "Contents of ${KUSTOMIZATION_FILE}:"
+            cat "${KUSTOMIZATION_FILE}"
+            exit 1
+          fi
 
   python-tests:
     name: Python Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.9
 
@@ -227,7 +303,7 @@ jobs:
         working-directory: src
         run: |-
           pip install -r requirements.txt
-          poetry install
+          poetry install --no-root
 
       - name: Run Tests
         working-directory: src

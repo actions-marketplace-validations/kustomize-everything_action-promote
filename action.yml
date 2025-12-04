@@ -75,10 +75,15 @@ inputs:
       merged.
     required: false
     default: "true"
+  labels:
+    description: |
+      Comma separated list of labels to add to the PR. Only used when promotion method
+      is pull_requets.
+    required: false
   sha256-checksum:
     description: Checksum of Kustomize version
     required: false
-    default: bba81aa61dba057db1d5abeddf1e522b568b2d906ab67a5c80935e97302c8773
+    default: 3b30477a7ff4fb6547fa77d8117e66d995c2bdd526de0dafbf8b7bcb9556c85d
   target-repo:
     description: The repo where the image promotion should be pushed
     required: true
@@ -90,7 +95,7 @@ inputs:
   version:
     description: Version of Kustomize to use
     required: false
-    default: 4.5.5
+    default: 5.1.1
   working-directory:
     description: |
       Working directory where the deployment repo should be checked out into
@@ -108,6 +113,12 @@ inputs:
   aggregate-pr-changes:
     description: If this is set to true, new changes will be aggregated in the existing open PR
     default: "false"
+  pr-reviewer:
+    description: Reviewer for the PR
+    default: ""
+  pr-title:
+    description: Title of the PR. If unset a default title will be used
+    default: ""
   pr-unique-key:
     description: this key will be added to all your PR branch names if "aggregate-pr-changes" is set to true
     default: "80514bedee3628f200f6"
@@ -120,6 +131,8 @@ outputs:
     description: "Git short SHA of promotion commit on deployment repo."
   images-updated:
     description: "List of image name:tags that were promoted"
+  pull-request-url:
+    description: "URL for the pull request created during promotion"
 
 runs:
   using: 'docker'
@@ -128,7 +141,7 @@ runs:
   # version of the container. This prevents the user from having to build
   # the container themselves.
   #image: 'Dockerfile'
-  image: 'docker://ghcr.io/kustomize-everything/action-promote:v3.7.1'
+  image: 'docker://ghcr.io/kustomize-everything/action-promote:v4.7.0'
   env:
     GIT_COMMIT_USER: ${{ inputs.git-commit-user }}
     GIT_COMMIT_EMAIL: ${{ inputs.git-commit-email }}
@@ -138,6 +151,7 @@ runs:
     CHARTS: ${{ inputs.charts }}
     PROMOTION_METHOD: ${{ inputs.promotion-method }}
     AUTO_MERGE: ${{ inputs.auto-merge }}
+    LABELS: ${{ inputs.labels }}
     STATUS_ATTEMPTS: ${{ inputs.status-attempts }}
     STATUS_INTERVAL: ${{ inputs.status-interval }}
     SSH_KEY: ${{ inputs.ssh-key }}
@@ -152,3 +166,5 @@ runs:
     DEBUG: ${{ inputs.debug }}
     AGGREGATE_PR_CHANGES: ${{ inputs.aggregate-pr-changes }}
     PR_UNIQUE_KEY: ${{ inputs.pr-unique-key }}
+    PR_TITLE: ${{ inputs.pr-title }}
+    PR_REVIEWER: ${{ inputs.pr-reviewer }}

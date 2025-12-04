@@ -39,8 +39,14 @@ function wait_for_result_not_found {
 }
 
 function git_commit_with_metadata {
+  # Default the title if no provided
+  if [[ -z "${PR_TITLE:-}" ]]; then
+    TITLE="Promote to ${OVERLAY_NAMES}"
+  else
+    TITLE="${PR_TITLE}"
+  fi
+
   # All of these variables are assumed to have been set by the caller
-  TITLE="Promote to ${OVERLAY_NAMES}"
   METADATA="---
   GITHUB_EVENT_NAME: ${GITHUB_EVENT_NAME}
   GITHUB_JOB: ${GITHUB_JOB}
@@ -92,7 +98,7 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
       git checkout -B "${BRANCH}"
     fi
   else
-    BRANCH="$(echo "promotion/${GITHUB_REPOSITORY:?}/${TARGET_BRANCH:?}/${GITHUB_SHA:?}" | tr "/" "-")"
+    BRANCH="$(echo "promotion/${GITHUB_REPOSITORY:?}/${TARGET_BRANCH:?}/${OVERLAY_NAMES_NO_SLASH:?}/${PR_UNIQUE_KEY:?}/${GITHUB_SHA:?}" | tr "/" "-")"
     git checkout -B "${BRANCH}"
   fi
 
@@ -107,15 +113,30 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
 
   git push origin "${BRANCH}" -f
   set +e
-  PR="$(gh pr view 2>&1)"
+  # Use explicit JSON fields to avoid querying deprecated projectCards
+  # Check if PR exists by attempting to view it
+  PR_OUTPUT="$(gh pr view --json number,title,state,url 2>&1)"
+  PR_EXIT_CODE=$?
   set -e
+  # If command failed or output contains error message, PR doesn't exist
   # We're just looking for the sub-string here, not a regex
   # shellcheck disable=SC2076
-  if [[ "${PR}" =~ "no pull requests found" ]]; then
+  if [[ ${PR_EXIT_CODE} -ne 0 ]] || [[ "${PR_OUTPUT}" =~ "no pull requests found" ]]; then
     gh pr create --fill
   else
     echo "PR Already exists:"
-    gh pr view
+    # Use explicit JSON fields to avoid querying deprecated projectCards
+    gh pr view --json number,title,state,url,headRefName,baseRefName
+  fi
+
+  if [[ -n "${LABELS}" ]]; then
+    echo "Adding labels to PR: ${LABELS}"
+    gh pr edit --add-label "${LABELS}"
+  fi  
+  
+  if [[ -n "${PR_REVIEWER}" ]]; then
+    echo "Adding reviewer to PR: ${PR_REVIEWER}"
+    gh pr edit --add-reviewer "${PR_REVIEWER}"
   fi
 
   echo
@@ -124,15 +145,40 @@ if [[ "${PROMOTION_METHOD}" == "pull_request" ]]; then
 
   echo
   if [[ "${AUTO_MERGE}" == "true" ]]; then
-    echo "Status checks have all passed. Merging PR..."
-    gh pr merge --squash --admin
+    # Retry to work around "Base branch was modified." error.
+    # Ref: https://github.com/cli/cli/issues/8092
+    for i in {1..3}; do
+      echo "Checking if the PR is still open..."
+      if ! gh pr view --json state | jq -e '.state == "MERGED"' >/dev/null 2>&1; then
+        echo "Status checks have all passed. Attempting to merge PR..."
+        if gh pr merge --squash --admin --delete-branch; then
+          break
+        fi
+      else
+        echo "PR is already merged. Stopping retries."
+        break  # Stop retrying if PR is already merged
+      fi
+      
+      if [[ $i -eq 3 ]]; then
+        echo "Failed to merge after 3 attempts."
+        exit 1
+      fi
+      
+      echo "Merge failed, retrying in 5 seconds..."
+      sleep 5
+    done
+
     echo
     echo "Promotion PR has been merged. Details below."
   else
     echo
     echo "Promotion PR has been created and has passed checks. Details below."
   fi
-  gh pr view
+  
+  # Use explicit JSON fields to avoid querying deprecated projectCards
+  gh pr view --json number,title,state,url,headRefName,baseRefName
+  PULL_REQUEST_URL="$(gh pr view --json url -q '.url')"
+  
 elif [[ "${PROMOTION_METHOD}" == "push" ]]; then
   git add .
   git_commit_with_metadata
@@ -171,3 +217,4 @@ echo "deployment-repo-sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 echo "images=${IMAGES_NAMES}" >> "${GITHUB_OUTPUT}"
 echo "charts=${CHARTS_NAMES}" >> "${GITHUB_OUTPUT}"
 echo "manifest-json=${MANIFEST_JSON}" >> "${GITHUB_OUTPUT}"
+echo "pull-request-url=${PULL_REQUEST_URL}" >> "${GITHUB_OUTPUT}"
